@@ -15,7 +15,7 @@ class SuperTrend(bt.Indicator):
     lines = ('supertrend', 'trend', 'signal_bars')
     params = (
         ('period', 10),
-        ('multiplier', 3.0),
+        ('multiplier', 2.0),
     )
     
     def __init__(self):
@@ -73,7 +73,7 @@ class BinaryOptionsStrategy(bt.Strategy):
         
         # Parámetros de ADX
         ('adx_period', 14),
-        ('adx_threshold', 25),
+        ('adx_threshold', 20),
         
         # Parámetros de RSI
         ('rsi_period', 14),
@@ -81,7 +81,7 @@ class BinaryOptionsStrategy(bt.Strategy):
         ('rsi_overbought', 70),
         
         # Parámetros de opciones binarias
-        ('expiry_minutes', 30),
+        ('expiry_minutes', 15),
         ('payout_rate', 0.92),
         ('trade_amount', 1),
         
@@ -91,8 +91,8 @@ class BinaryOptionsStrategy(bt.Strategy):
         ('supertrend_delay_bars', 4),
 
         # AGREGAR ESTOS PARÁMETROS AQUÍ
-        ('trading_start_hour', 9),    # Hora de inicio (9 AM)
-        ('trading_end_hour', 13),     # Hora de fin (1 PM)  
+        ('trading_start_hour', 3),    # Hora de inicio (9 AM)
+        ('trading_end_hour', 6),     # Hora de fin (1 PM)  
         ('timezone_offset', -4),      # UTC-4 para Cuba
         ('enable_time_filter', True), # Activar/desactivar filtro
         
