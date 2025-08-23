@@ -431,7 +431,7 @@ def main():
     # 1. Buscar archivo de datos
     possible_files = [
         "eurusd_5min_synthetic_30days.csv",
-        "eurusd_5min_synthetic_365days.csv",
+        #"eurusd_5min_synthetic_365days.csv",
     ]
     
     data_file = None
@@ -457,7 +457,6 @@ def main():
     print("2. Backtest con debug activado")
     print("3. Optimización de parámetros")
     print("4. Backtest personalizado")
-    print("5. Backtest solo en horario 9AM-1PM Cuba")
     
     choice = input("\nElige una opción (1-4): ").strip()
     
@@ -493,7 +492,6 @@ def main():
             'debug': True
         }
         
-        # MOVER ESTAS DOS LÍNEAS AQUÍ:
         result = run_single_backtest(data_feed, **custom_params)
         print_results(result)
 
