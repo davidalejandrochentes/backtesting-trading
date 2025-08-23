@@ -1,0 +1,28 @@
+Mi estrategia es la siguiente, pero me gustaría afinarla; es decir, poder calibrar los indicadores y el tiempo de expiración de la operación para estandarizarla y obtener los resultados que espero. Te la voy a describir paso a paso. Opera en el mercado de forex y tiene como objetivo aprovechar las tendencias para realizar operaciones a favor de ellas.
+Indicadores:
+
+    EMA (período = 8)
+
+    EMA (período = 16)
+
+    EMA (período = 24)
+
+    Supertrend (ATR período = 10; multiplicador = 3)
+
+    ADX (suavizado ADX = 14; longitud DI = 14). Niveles de fuerza: baja = 7.43, media = 23.30, fuerte = 39.17
+
+    RSI (período = 14; sobreventa = 30, sobrecompra = 70)
+
+Pasos de la estrategia:
+
+    Ingreso al gráfico de EUR/USD en temporalidad de una hora y marco las posibles zonas de soporte y resistencia.
+
+    Cambio el gráfico a la temporalidad de 5 minutos.
+
+    Espero en el gráfico la siguiente confirmación de los indicadores:
+
+        Para una operación al alza: El precio está por encima de las tres medias móviles, el indicador Supertrend e indica compra y esta activo hace no mas de 3 velas, el ADX muestra una tendencia por encima de 25 (lo que indica fuerza) y el RSI aún no ha llegado a la zona de sobrecompra (70).
+
+        Para una operación a la baja: Se aplican las condiciones opuestas.
+
+Si se cumplen estos casos, realizo la operación correspondiente.
