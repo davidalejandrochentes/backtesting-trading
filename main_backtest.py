@@ -89,6 +89,12 @@ class BinaryOptionsStrategy(bt.Strategy):
         ('max_trades_per_day', 10),
         ('min_time_between_trades', 3),  # minutos
         ('supertrend_delay_bars', 4),
+
+        # AGREGAR ESTOS PARÁMETROS AQUÍ
+        ('trading_start_hour', 9),    # Hora de inicio (9 AM)
+        ('trading_end_hour', 13),     # Hora de fin (1 PM)  
+        ('timezone_offset', -4),      # UTC-4 para Cuba
+        ('enable_time_filter', True), # Activar/desactivar filtro
         
         # Debug
         ('debug', False),
@@ -120,7 +126,26 @@ class BinaryOptionsStrategy(bt.Strategy):
         
         # Log de trades
         self.trade_log = []
+
+    def is_trading_time(self, current_time):
+        """
+        Verificar si la hora actual está dentro del horario de trading
+        Convierte UTC a hora local de Cuba (UTC-4)
+        """
+        if not self.params.enable_time_filter:
+            return True
         
+        # Convertir tiempo UTC a hora local de Cuba
+        cuba_hour = (current_time.hour + self.params.timezone_offset) % 24
+        
+        # Verificar si está dentro del horario permitido
+        is_valid_time = self.params.trading_start_hour <= cuba_hour < self.params.trading_end_hour
+        
+        if self.params.debug and not is_valid_time:
+            print(f"⏰ Fuera de horario: {current_time} UTC -> {cuba_hour:02d}:XX Cuba")
+        
+        return is_valid_time
+
     def next(self):
         current_time = self.data.datetime.datetime(0)
         current_date = current_time.date()
@@ -128,11 +153,15 @@ class BinaryOptionsStrategy(bt.Strategy):
         # Revisar trades que expiran
         self.check_expired_trades(current_time)
         
-        # Control de frecuencia de trades
+        # NUEVO: Verificar horario de trading PRIMERO
+        if not self.is_trading_time(current_time):
+            return  # Salir sin operar si está fuera de horario
+        
+        # Control de frecuencia de trades (código existente)
         if self.should_skip_trade(current_time, current_date):
             return
         
-        # Verificar señales de entrada
+        # Verificar señales de entrada (código existente)
         if self.check_call_conditions():
             self.enter_binary_trade('CALL', current_time)
         elif self.check_put_conditions():
@@ -215,6 +244,13 @@ class BinaryOptionsStrategy(bt.Strategy):
         entry_price = self.data.close[0]
         expiry_time = entry_time + timedelta(minutes=self.params.expiry_minutes)
         
+        # NUEVO: Verificar que la expiración también esté en horario válido
+        if self.params.enable_time_filter and not self.is_trading_time(expiry_time):
+            if self.params.debug:
+                print(f"⚠️ Trade cancelado: expiración fuera de horario {expiry_time}")
+            return
+        
+        # Resto del código existente...
         trade_info = {
             'type': trade_type,
             'entry_time': entry_time,
@@ -227,9 +263,10 @@ class BinaryOptionsStrategy(bt.Strategy):
         self.last_trade_time = entry_time
         self.daily_trades[entry_time.date()] += 1
         
-        # Log para debugging
+        # Log mejorado (opcional)
         if self.params.debug:
-            print(f"📈 {entry_time}: {trade_type} @ {entry_price:.5f}, Expiry: {expiry_time}")
+            cuba_hour = (entry_time.hour + self.params.timezone_offset) % 24
+            print(f"📈 {entry_time}: {trade_type} @ {entry_price:.5f} (Cuba: {cuba_hour:02d}:{entry_time.minute:02d})")
     
     def check_expired_trades(self, current_time):
         """Verificar trades que han expirado y calcular resultados"""
@@ -420,6 +457,7 @@ def main():
     print("2. Backtest con debug activado")
     print("3. Optimización de parámetros")
     print("4. Backtest personalizado")
+    print("5. Backtest solo en horario 9AM-1PM Cuba")
     
     choice = input("\nElige una opción (1-4): ").strip()
     
@@ -455,6 +493,7 @@ def main():
             'debug': True
         }
         
+        # MOVER ESTAS DOS LÍNEAS AQUÍ:
         result = run_single_backtest(data_feed, **custom_params)
         print_results(result)
 
