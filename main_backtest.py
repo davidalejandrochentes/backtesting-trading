@@ -64,8 +64,8 @@ class BinaryOptionsStrategy(bt.Strategy):
     params = (
         # Parámetros de EMAs
         ('ema1_period', 8),
-        ('ema2_period', 16),
-        ('ema3_period', 24),
+        #('ema2_period', 16),
+        #('ema3_period', 24),
         
         # Parámetros de SuperTrend
         ('st_period', 10),
@@ -81,14 +81,14 @@ class BinaryOptionsStrategy(bt.Strategy):
         ('rsi_overbought', 70),
         
         # Parámetros de opciones binarias
-        ('expiry_minutes', 30),
+        ('expiry_minutes', 60),
         ('payout_rate', 0.70),
         ('trade_amount', 1),
         
         # Control de riesgo
         ('max_trades_per_day', 10),
         ('min_time_between_trades', 3),  # minutos
-        ('supertrend_delay_bars', 4),
+        ('supertrend_delay_bars', 3),
 
         # AGREGAR ESTOS PARÁMETROS AQUÍ
         ('trading_start_hour', 8),    # Hora de inicio (9 AM)
@@ -103,8 +103,8 @@ class BinaryOptionsStrategy(bt.Strategy):
     def __init__(self):
         # Indicadores técnicos
         self.ema1 = bt.indicators.EMA(self.data.close, period=self.params.ema1_period)
-        self.ema2 = bt.indicators.EMA(self.data.close, period=self.params.ema2_period)
-        self.ema3 = bt.indicators.EMA(self.data.close, period=self.params.ema3_period)
+        #self.ema2 = bt.indicators.EMA(self.data.close, period=self.params.ema2_period)
+        #self.ema3 = bt.indicators.EMA(self.data.close, period=self.params.ema3_period)
         
         self.supertrend = SuperTrend(self.data, 
                                    period=self.params.st_period,
@@ -169,15 +169,17 @@ class BinaryOptionsStrategy(bt.Strategy):
     
     def check_call_conditions(self):
         """Condiciones para operación CALL (al alza)"""
-        if len(self.data) < max(self.params.ema3_period, self.params.adx_period, self.params.rsi_period):
+        #if len(self.data) < max(self.params.ema3_period, self.params.adx_period, self.params.rsi_period):
+        if len(self.data) < max(self.params.ema1_period, self.params.adx_period, self.params.rsi_period):
             return False
         
         current_price = self.data.close[0]
         
         # 1. Precio por encima de las 3 EMAs
-        above_emas = (current_price > self.ema1[0] and 
-                        current_price > self.ema2[0] and 
-                        current_price > self.ema3[0])
+        #above_emas = (current_price > self.ema1[0] and 
+        #                current_price > self.ema2[0] and 
+        #                current_price > self.ema3[0])
+        above_emas = current_price > self.ema1[0]
         
         # 2. SuperTrend en señal de compra Y han pasado las velas requeridas
         st_signal = (self.supertrend.trend[0] == 1 and 
@@ -198,15 +200,17 @@ class BinaryOptionsStrategy(bt.Strategy):
     
     def check_put_conditions(self):
         """Condiciones para operación PUT (a la baja)"""
-        if len(self.data) < max(self.params.ema3_period, self.params.adx_period, self.params.rsi_period):
+        #if len(self.data) < max(self.params.ema3_period, self.params.adx_period, self.params.rsi_period):
+        if len(self.data) < max(self.params.ema1_period, self.params.adx_period, self.params.rsi_period):
             return False
         
         current_price = self.data.close[0]
         
         # 1. Precio por debajo de las 3 EMAs
-        below_emas = (current_price < self.ema1[0] and 
-                        current_price < self.ema2[0] and 
-                        current_price < self.ema3[0])
+        #below_emas = (current_price < self.ema1[0] and 
+        #                current_price < self.ema2[0] and 
+        #                current_price < self.ema3[0])
+        below_emas = current_price < self.ema1[0]
         
         # 2. SuperTrend en señal de venta Y han pasado las velas requeridas
         st_signal = (self.supertrend.trend[0] == -1 and 
@@ -353,7 +357,11 @@ def load_data(filename):
         return None
     
     try:
-        df = pd.read_csv(filename)
+        # CAMBIO: Agregar nombres de columnas y separador
+        df = pd.read_csv(filename, 
+                        names=['datetime', 'open', 'high', 'low', 'close', 'volume'],
+                        sep='\t')  # Usar tabulación como separador
+        
         df['datetime'] = pd.to_datetime(df['datetime'])
         df.set_index('datetime', inplace=True)
         
@@ -387,8 +395,7 @@ def main():
     
     # 1. Buscar archivo de datos
     possible_files = [
-        "eurusd_5min_synthetic_30days.csv",
-        #"eurusd_5min_synthetic_365days.csv",
+        "EURUSD5.csv",
     ]
     
     data_file = None
