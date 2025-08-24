@@ -63,17 +63,17 @@ class SuperTrend(bt.Indicator):
 class BinaryOptionsStrategy(bt.Strategy):
     params = (
         # Parámetros de EMAs
-        ('ema1_period', 8),
+        ('ema1_period', 13),
         #('ema2_period', 16),
         #('ema3_period', 24),
         
         # Parámetros de SuperTrend
         ('st_period', 10),
-        ('st_multiplier', 3.0),
+        ('st_multiplier', 2.5),
         
         # Parámetros de ADX
         ('adx_period', 14),
-        ('adx_threshold', 25),
+        ('adx_threshold', 20),
         
         # Parámetros de RSI
         ('rsi_period', 14),
@@ -81,14 +81,14 @@ class BinaryOptionsStrategy(bt.Strategy):
         ('rsi_overbought', 70),
         
         # Parámetros de opciones binarias
-        ('expiry_minutes', 60),
+        ('expiry_minutes', 30),
         ('payout_rate', 0.70),
         ('trade_amount', 1),
         
         # Control de riesgo
         ('max_trades_per_day', 10),
         ('min_time_between_trades', 3),  # minutos
-        ('supertrend_delay_bars', 3),
+        ('supertrend_delay_bars', 2),
 
         # AGREGAR ESTOS PARÁMETROS AQUÍ
         ('trading_start_hour', 8),    # Hora de inicio (9 AM)
