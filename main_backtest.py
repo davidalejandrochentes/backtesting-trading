@@ -15,7 +15,7 @@ class SuperTrend(bt.Indicator):
     lines = ('supertrend', 'trend', 'signal_bars')
     params = (
         ('period', 10),
-        ('multiplier', 2.0),
+        ('multiplier', 3.0),
     )
     
     def __init__(self):
@@ -73,7 +73,7 @@ class BinaryOptionsStrategy(bt.Strategy):
         
         # Parámetros de ADX
         ('adx_period', 14),
-        ('adx_threshold', 20),
+        ('adx_threshold', 25),
         
         # Parámetros de RSI
         ('rsi_period', 14),
@@ -81,8 +81,8 @@ class BinaryOptionsStrategy(bt.Strategy):
         ('rsi_overbought', 70),
         
         # Parámetros de opciones binarias
-        ('expiry_minutes', 15),
-        ('payout_rate', 0.92),
+        ('expiry_minutes', 30),
+        ('payout_rate', 0.70),
         ('trade_amount', 1),
         
         # Control de riesgo
@@ -91,10 +91,10 @@ class BinaryOptionsStrategy(bt.Strategy):
         ('supertrend_delay_bars', 4),
 
         # AGREGAR ESTOS PARÁMETROS AQUÍ
-        ('trading_start_hour', 3),    # Hora de inicio (9 AM)
-        ('trading_end_hour', 6),     # Hora de fin (1 PM)  
+        ('trading_start_hour', 8),    # Hora de inicio (9 AM)
+        ('trading_end_hour', 13),     # Hora de fin (1 PM)  
         ('timezone_offset', -4),      # UTC-4 para Cuba
-        ('enable_time_filter', True), # Activar/desactivar filtro
+        ('enable_time_filter', False), # Activar/desactivar filtro
         
         # Debug
         ('debug', False),
@@ -380,49 +380,6 @@ def run_single_backtest(data_feed, **params):
     
     return results[0].analyzers.binary_analyzer.results
 
-def optimize_parameters(data_feed):
-    """Optimización básica de parámetros"""
-    print("🔧 Iniciando optimización de parámetros...")
-    
-    # Parámetros a optimizar (versión reducida para velocidad)
-    param_combinations = [
-        # Configuración conservadora
-        {'ema1_period': 8, 'ema2_period': 16, 'ema3_period': 24, 'st_multiplier': 3.0, 'expiry_minutes': 5, 'adx_threshold': 25},
-        
-        # Configuración agresiva
-        {'ema1_period': 6, 'ema2_period': 14, 'ema3_period': 22, 'st_multiplier': 2.5, 'expiry_minutes': 3, 'adx_threshold': 20},
-        
-        # Configuración defensiva
-        {'ema1_period': 10, 'ema2_period': 18, 'ema3_period': 26, 'st_multiplier': 3.5, 'expiry_minutes': 7, 'adx_threshold': 30},
-        
-        # Expiración más larga
-        {'ema1_period': 8, 'ema2_period': 16, 'ema3_period': 24, 'st_multiplier': 3.0, 'expiry_minutes': 10, 'adx_threshold': 25},
-    ]
-    
-    best_result = None
-    best_params = None
-    best_score = 0
-    
-    for i, params in enumerate(param_combinations):
-        print(f"🧪 Probando configuración {i+1}/{len(param_combinations)}: {params}")
-        
-        result = run_single_backtest(data_feed, **params)
-        
-        if result and result.get('total_trades', 0) >= 10:
-            # Score combinado: win_rate * total_pnl * número_de_trades
-            score = result['win_rate'] * max(0, result['total_pnl']) * min(result['total_trades'] / 100, 1)
-            
-            print(f"   📊 Win Rate: {result['win_rate']:.1f}%, P&L: ${result['total_pnl']:.2f}, Trades: {result['total_trades']}, Score: {score:.2f}")
-            
-            if score > best_score:
-                best_score = score
-                best_result = result
-                best_params = params
-        else:
-            print("   ⚠️ Pocos trades o resultado inválido")
-    
-    return best_params, best_result
-
 def main():
     """Función principal"""
     print("=== SISTEMA DE BACKTESTING PARA OPCIONES BINARIAS ===")
@@ -451,49 +408,10 @@ def main():
     if data_feed is None:
         return
     
-    # 3. Menú de opciones
-    print("\n🚀 ¿Qué quieres hacer?")
-    print("1. Backtest rápido con parámetros por defecto")
-    print("2. Backtest con debug activado")
-    print("3. Optimización de parámetros")
-    print("4. Backtest personalizado")
-    
-    choice = input("\nElige una opción (1-4): ").strip()
-    
-    if choice == "1":
-        print("\n📊 Ejecutando backtest con parámetros por defecto...")
-        result = run_single_backtest(data_feed)
-        print_results(result)
-        
-    elif choice == "2":
-        print("\n🔍 Ejecutando backtest con debug...")
-        result = run_single_backtest(data_feed, debug=True)
-        print_results(result)
-        
-    elif choice == "3":
-        print("\n🔧 Ejecutando optimización...")
-        best_params, best_result = optimize_parameters(data_feed)
-        if best_result:
-            print(f"\n🏆 MEJORES PARÁMETROS: {best_params}")
-            print_results(best_result)
-        else:
-            print("❌ No se encontraron parámetros óptimos")
-            
-    elif choice == "4":
-        print("\n⚙️ Configuración personalizada:")
-        expiry = int(input("Tiempo de expiración (minutos, default=5): ") or "5")
-        adx_threshold = int(input("Umbral ADX (default=25): ") or "25")
-        st_multiplier = float(input("SuperTrend multiplier (default=3.0): ") or "3.0")
-        
-        custom_params = {
-            'expiry_minutes': expiry,
-            'adx_threshold': adx_threshold,
-            'st_multiplier': st_multiplier,
-            'debug': True
-        }
-        
-        result = run_single_backtest(data_feed, **custom_params)
-        print_results(result)
+    # 3. Ejecutar backtest con parámetros por defecto
+    print("\n📊 Ejecutando backtest con parámetros por defecto...")
+    result = run_single_backtest(data_feed)
+    print_results(result)
 
 def print_results(result):
     """Mostrar resultados de forma clara"""
