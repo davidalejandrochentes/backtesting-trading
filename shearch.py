@@ -41,7 +41,7 @@ class ParameterOptimizer:
             'rsi_oversold': [30, 35],
             'rsi_overbought': [65, 70],
             'supertrend_delay_bars': [1, 2, 3, 4, 5],
-            'expiry_minutes': [15, 30, 60],
+            'expiry_minutes': [15, 30, 45, 60, 90, 120],
             'max_trades_per_day': [8, 12, 16],
             'min_time_between_trades': [3, 5, 8],
         }
