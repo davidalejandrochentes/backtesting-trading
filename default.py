@@ -69,26 +69,26 @@ class BinaryOptionsStrategy(bt.Strategy):
         
         # Parámetros de SuperTrend
         ('st_period', 10),
-        ('st_multiplier', 2.5),
+        ('st_multiplier', 3.5),
+        ('supertrend_delay_bars', 3),
         
         # Parámetros de ADX
-        ('adx_period', 14),
-        ('adx_threshold', 20),
+        ('adx_period', 21),
+        ('adx_threshold', 30),
         
         # Parámetros de RSI
-        ('rsi_period', 14),
-        ('rsi_oversold', 30),
-        ('rsi_overbought', 70),
+        ('rsi_period', 21),
+        ('rsi_oversold', 35),
+        ('rsi_overbought', 65),
         
         # Parámetros de opciones binarias
-        ('expiry_minutes', 30),
+        ('expiry_minutes', 60),
         ('payout_rate', 0.70),
         ('trade_amount', 1),
         
         # Control de riesgo
         ('max_trades_per_day', 10),
         ('min_time_between_trades', 3),  # minutos
-        ('supertrend_delay_bars', 2),
 
         # Parámetros de horario
         ('trading_start_hour', 8),

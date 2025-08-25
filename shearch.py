@@ -32,19 +32,18 @@ class ParameterOptimizer:
     def define_parameter_ranges(self):
         """Definir rangos de parámetros para optimizar"""
         param_ranges = {
-            # Reducimos los rangos para hacer pruebas más rápidas inicialmente
-            'ema1_period': [8, 13, 21],  # Reducido de 4 a 3 valores
-            'st_period': [7, 10, 14],    # Reducido de 4 a 3 valores  
-            'st_multiplier': [2.0, 2.5, 3.0],  # Reducido de 5 a 3 valores
-            'adx_period': [14, 21],  
-            'adx_threshold': [20, 25, 30],  
-            'rsi_period': [14, 21],  
-            'rsi_oversold': [30, 35],     
-            'rsi_overbought': [65, 70],  
-            'supertrend_delay_bars': [1, 2, 3],  # Reducido de 5 a 3 valores
-            'expiry_minutes': [15, 30],  # Reducido de 3 a 2 valores
-            'max_trades_per_day': [8, 12],  # Reducido de 3 a 2 valores
-            'min_time_between_trades': [3, 5], # Reducido de 3 a 2 valores
+            'ema1_period': [5, 8, 13, 21],
+            'st_period': [7, 10, 14, 21],
+            'st_multiplier': [2.0, 2.5, 3.0, 3.5, 4.0],
+            'adx_period': [14, 21],
+            'adx_threshold': [20, 25, 30],
+            'rsi_period': [14, 21],
+            'rsi_oversold': [30, 35],
+            'rsi_overbought': [65, 70],
+            'supertrend_delay_bars': [1, 2, 3, 4, 5],
+            'expiry_minutes': [15, 30, 60],
+            'max_trades_per_day': [8, 12, 16],
+            'min_time_between_trades': [3, 5, 8],
         }
         
         return param_ranges
@@ -102,7 +101,16 @@ class ParameterOptimizer:
         
         return param_sets
     
-    def run_optimization(self, max_combinations=50, min_trades=10):
+    def format_result_summary(self, result):
+        """Formatear un resumen limpio del resultado"""
+        if not result or not isinstance(result, dict):
+            return "Resultado inválido"
+        
+        return (f"Trades: {result.get('total_trades', 0)} | "
+                f"Win Rate: {result.get('win_rate', 0):.1f}% | "
+                f"P&L: ${result.get('total_pnl', 0):.2f}")
+    
+    def run_optimization(self, max_combinations=50, min_trades=10, verbose=False):
         """Ejecutar optimización de parámetros"""
         print("\n" + "="*60)
         print("🔍 INICIANDO OPTIMIZACIÓN DE PARÁMETROS")
@@ -119,51 +127,64 @@ class ParameterOptimizer:
         valid_results = 0
         error_count = 0
         
+        # Para mostrar progreso cada 10%
+        progress_points = [int(total_sets * p / 10) for p in range(1, 11)]
+        next_progress_point = 0
+        
         for i, params in enumerate(param_sets):
             try:
-                # Mostrar progreso
-                progress = ((i + 1) / total_sets) * 100
-                print(f"⚡ Progreso: {i+1}/{total_sets} ({progress:.1f}%) - Válidos: {valid_results}", end='\r')
+                # Mostrar progreso solo en ciertos puntos
+                if i + 1 in progress_points:
+                    progress = ((i + 1) / total_sets) * 100
+                    print(f"⚡ Progreso: {progress:.0f}% - Válidos: {valid_results}/{i+1}")
                 
-                # Debug: mostrar parámetros que se están probando
-                if i < 3:  # Solo para las primeras 3 combinaciones
-                    print(f"\n🔧 Probando combinación {i+1}: {params}")
+                # Debug detallado solo si verbose=True y para las primeras 3 combinaciones
+                if verbose and i < 3:
+                    print(f"\n🔧 Probando combinación {i+1}:")
+                    for key, value in params.items():
+                        print(f"   {key}: {value}")
                 
                 # Ejecutar backtest
                 result = run_single_backtest(self.data_feed, **params)
                 
-                # Debug: mostrar resultado
-                if i < 3:
-                    print(f"📊 Resultado: {result}")
+                # Debug del resultado solo si verbose=True
+                if verbose and i < 3:
+                    print(f"📊 Resultado: {self.format_result_summary(result)}")
                 
                 # Validar resultado
                 if result and isinstance(result, dict):
                     total_trades = result.get('total_trades', 0)
                     if total_trades >= min_trades:
-                        result['parameters'] = params.copy()
-                        result['combination_id'] = i + 1
-                        self.results.append(result)
+                        # Limpiar el resultado antes de guardarlo (eliminar lista de trades)
+                        clean_result = {k: v for k, v in result.items() if k != 'trades'}
+                        clean_result['parameters'] = params.copy()
+                        clean_result['combination_id'] = i + 1
+                        self.results.append(clean_result)
                         valid_results += 1
                         
-                        if i < 3:
+                        if verbose and i < 3:
                             print(f"✅ Combinación {i+1} válida: {total_trades} trades")
                     else:
-                        if i < 3:
+                        if verbose and i < 3:
                             print(f"❌ Combinación {i+1} rechazada: solo {total_trades} trades (mínimo {min_trades})")
                 else:
                     error_count += 1
-                    if i < 3:
+                    if verbose and i < 3:
                         print(f"❌ Combinación {i+1} falló: resultado nulo o inválido")
                 
             except Exception as e:
                 error_count += 1
-                if i < 3:
+                if verbose and i < 3:
                     print(f"❌ Error en combinación {i+1}: {str(e)}")
                 continue
         
+        # Progreso final
+        print(f"⚡ Progreso: 100% - Válidos: {valid_results}/{total_sets}")
+        
         print(f"\n✅ Optimización completada!")
         print(f"📊 Combinaciones válidas: {valid_results}/{total_sets}")
-        print(f"⚠️ Errores encontrados: {error_count}")
+        if error_count > 0:
+            print(f"⚠️ Errores encontrados: {error_count}")
         
         if valid_results > 0:
             self.analyze_results()
@@ -187,7 +208,9 @@ class ParameterOptimizer:
         by_profit_factor = sorted(self.results, key=lambda x: x['profit_factor'], reverse=True)
         by_trades = sorted(self.results, key=lambda x: x['total_trades'], reverse=True)
         
-        self.best_result = by_pnl[0]  # El mejor por P&L total
+        # Criterio: Mejor Win Rate (mayor porcentaje de éxito)
+        self.best_result = by_winrate[0]  # La configuración con mayor porcentaje de aciertos
+        print(f"🎯 Criterio: Mayor Win Rate (Porcentaje de Éxito)")
         
         print("\n" + "="*80)
         print("🏆 TOP 5 RESULTADOS POR DIFERENTES MÉTRICAS")
@@ -284,7 +307,7 @@ class ParameterOptimizer:
         except Exception as e:
             print(f"❌ Error guardando resultados: {e}")
 
-def run_parameter_search():
+def run_parameter_search(verbose=False):
     """Función principal para búsqueda de parámetros"""
     print("🔍 BÚSQUEDA Y OPTIMIZACIÓN DE PARÁMETROS")
     print("=" * 50)
@@ -315,14 +338,22 @@ def run_parameter_search():
     try:
         max_combinations = int(input("🧪 Máximo de combinaciones a probar (por defecto 20): ") or 20)
         min_trades = int(input("📈 Mínimo de trades requeridos (por defecto 5): ") or 5)
+        
+        # Preguntar si quiere modo verbose
+        verbose_input = input("🔍 ¿Mostrar información detallada de debug? (y/N): ").strip().lower()
+        verbose = verbose_input in ['y', 'yes', 'sí', 'si']
+        
     except ValueError:
         max_combinations = 20
         min_trades = 5
+        verbose = False
         print("⚠️ Usando valores por defecto")
     
     # 4. Ejecutar optimización
     optimizer = ParameterOptimizer(data_feed)
-    optimizer.run_optimization(max_combinations=max_combinations, min_trades=min_trades)
+    optimizer.run_optimization(max_combinations=max_combinations, 
+                             min_trades=min_trades, 
+                             verbose=verbose)
     
     # 5. Guardar resultados
     if optimizer.results:
