@@ -32,35 +32,20 @@ class ParameterOptimizer:
     def define_parameter_ranges(self):
         """Definir rangos de parámetros para optimizar"""
         param_ranges = {
-                # CÁLCULO CONSERVADOR:
-                # 3 × 2 × 3 × 1 × 2 × 1 × 1 × 1 × 3 × 2 × 2 × 1 = 432 combinaciones
-                # ¡Solo 432 combinaciones pero muy enfocadas!
-            'ema1_period': [8, 13, 21],                # 3 valores (más confiables)
-            'st_period': [10, 14],                     # 2 valores (estándar)
-            'st_multiplier': [2.5, 3.0, 3.5],         # 3 valores (rango medio)
-            'adx_period': [14],                        # 1 valor (estándar)
-            'adx_threshold': [20, 25],                 # 2 valores (prácticos)
-            'rsi_period': [14],                        # 1 valor (clásico)
-            'rsi_oversold': [30],                      # 1 valor (estándar)
-            'rsi_overbought': [70],                    # 1 valor (estándar)
-            'supertrend_delay_bars': [2, 3, 4],       # 3 valores (más efectivos)
-            'expiry_minutes': [30, 60],                # 2 valores (probados)
-            'max_trades_per_day': [10, 15],            # 2 valores (balanceados)
-            'min_time_between_trades': [5],  
                 # CÁLCULO DE COMBINACIONES:
                 # 4 × 4 × 5 × 2 × 3 × 2 × 2 × 2 × 5 × 3 × 3 × 3 = 252,000 combinaciones
-            #'ema1_period': [5, 8, 13, 21],
-            #'st_period': [7, 10, 14, 21],
-            #'st_multiplier': [2.0, 2.5, 3.0, 3.5, 4.0],
-            #'adx_period': [14, 21],                    # Era [10, 14, 18, 21]
-            #'adx_threshold': [20, 25, 30],             # Era [20, 25, 30, 35] - 35 muy restrictivo
-            #'rsi_period': [14, 21],                    # Era [9, 14, 21] - 9 muy reactivo
-            #'rsi_oversold': [30, 35],                  # Era [25, 30, 35] - 25 muy extremo
-            #'rsi_overbought': [65, 70],                # Era [65, 70, 75] - 75 muy extremo
-            #'supertrend_delay_bars': [1, 2, 3, 4, 5],
-            #'expiry_minutes': [15, 30, 60],            # Era [15, 30, 60, 120]
-            #'max_trades_per_day': [8, 12, 16],         # Era [5, 10, 15, 20]
-            #'min_time_between_trades': [3, 5, 8],      # Era [1, 3, 5, 10] - 1min muy poco
+            'ema1_period': [5, 8, 13, 21],
+            'st_period': [7, 10, 14, 21],
+            'st_multiplier': [2.0, 2.5, 3.0, 3.5, 4.0],
+            'adx_period': [14, 21],  
+            'adx_threshold': [20, 25, 30],  
+            'rsi_period': [14, 21],  
+            'rsi_oversold': [30, 35],     
+            'rsi_overbought': [65, 70],  
+            'supertrend_delay_bars': [1, 2, 3, 4, 5],
+            'expiry_minutes': [15, 30, 60],  
+            'max_trades_per_day': [8, 12, 16], 
+            'min_time_between_trades': [3, 5, 8], 
         }
         
         return param_ranges
