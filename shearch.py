@@ -32,20 +32,19 @@ class ParameterOptimizer:
     def define_parameter_ranges(self):
         """Definir rangos de parámetros para optimizar"""
         param_ranges = {
-                # CÁLCULO DE COMBINACIONES:
-                # 4 × 4 × 5 × 2 × 3 × 2 × 2 × 2 × 5 × 3 × 3 × 3 = 252,000 combinaciones
-            'ema1_period': [5, 8, 13, 21],
-            'st_period': [7, 10, 14, 21],
-            'st_multiplier': [2.0, 2.5, 3.0, 3.5, 4.0],
+            # Reducimos los rangos para hacer pruebas más rápidas inicialmente
+            'ema1_period': [8, 13, 21],  # Reducido de 4 a 3 valores
+            'st_period': [7, 10, 14],    # Reducido de 4 a 3 valores  
+            'st_multiplier': [2.0, 2.5, 3.0],  # Reducido de 5 a 3 valores
             'adx_period': [14, 21],  
             'adx_threshold': [20, 25, 30],  
             'rsi_period': [14, 21],  
             'rsi_oversold': [30, 35],     
             'rsi_overbought': [65, 70],  
-            'supertrend_delay_bars': [1, 2, 3, 4, 5],
-            'expiry_minutes': [15, 30, 60],  
-            'max_trades_per_day': [8, 12, 16], 
-            'min_time_between_trades': [3, 5, 8], 
+            'supertrend_delay_bars': [1, 2, 3],  # Reducido de 5 a 3 valores
+            'expiry_minutes': [15, 30],  # Reducido de 3 a 2 valores
+            'max_trades_per_day': [8, 12],  # Reducido de 3 a 2 valores
+            'min_time_between_trades': [3, 5], # Reducido de 3 a 2 valores
         }
         
         return param_ranges
@@ -69,7 +68,15 @@ class ParameterOptimizer:
             
             param_sets = []
             for combo in combinations:
-                param_set = dict(zip(keys, combo))
+                param_set = {}
+                for key, value in zip(keys, combo):
+                    # Convertir a tipos Python nativos
+                    if isinstance(value, (np.integer, np.int64, np.int32)):
+                        param_set[key] = int(value)
+                    elif isinstance(value, (np.floating, np.float64, np.float32)):
+                        param_set[key] = float(value)
+                    else:
+                        param_set[key] = value
                 param_sets.append(param_set)
                 
         else:
@@ -77,10 +84,20 @@ class ParameterOptimizer:
             print(f"🎲 Usando muestreo aleatorio de {max_combinations} combinaciones")
             param_sets = []
             
+            # Asegurar reproducibilidad
+            np.random.seed(42)
+            
             for _ in range(max_combinations):
                 param_set = {}
                 for param, values in param_ranges.items():
-                    param_set[param] = np.random.choice(values)
+                    # Convertir a tipos Python nativos para evitar problemas con numpy
+                    selected_value = np.random.choice(values)
+                    if isinstance(selected_value, (np.integer, np.int64, np.int32)):
+                        param_set[param] = int(selected_value)
+                    elif isinstance(selected_value, (np.floating, np.float64, np.float32)):
+                        param_set[param] = float(selected_value)
+                    else:
+                        param_set[param] = selected_value
                 param_sets.append(param_set)
         
         return param_sets
@@ -100,33 +117,63 @@ class ParameterOptimizer:
         
         # Ejecutar backtests
         valid_results = 0
+        error_count = 0
         
         for i, params in enumerate(param_sets):
             try:
                 # Mostrar progreso
                 progress = ((i + 1) / total_sets) * 100
-                print(f"⚡ Progreso: {i+1}/{total_sets} ({progress:.1f}%)", end='\r')
+                print(f"⚡ Progreso: {i+1}/{total_sets} ({progress:.1f}%) - Válidos: {valid_results}", end='\r')
+                
+                # Debug: mostrar parámetros que se están probando
+                if i < 3:  # Solo para las primeras 3 combinaciones
+                    print(f"\n🔧 Probando combinación {i+1}: {params}")
                 
                 # Ejecutar backtest
                 result = run_single_backtest(self.data_feed, **params)
                 
+                # Debug: mostrar resultado
+                if i < 3:
+                    print(f"📊 Resultado: {result}")
+                
                 # Validar resultado
-                if result and result.get('total_trades', 0) >= min_trades:
-                    result['parameters'] = params.copy()
-                    result['combination_id'] = i + 1
-                    self.results.append(result)
-                    valid_results += 1
+                if result and isinstance(result, dict):
+                    total_trades = result.get('total_trades', 0)
+                    if total_trades >= min_trades:
+                        result['parameters'] = params.copy()
+                        result['combination_id'] = i + 1
+                        self.results.append(result)
+                        valid_results += 1
+                        
+                        if i < 3:
+                            print(f"✅ Combinación {i+1} válida: {total_trades} trades")
+                    else:
+                        if i < 3:
+                            print(f"❌ Combinación {i+1} rechazada: solo {total_trades} trades (mínimo {min_trades})")
+                else:
+                    error_count += 1
+                    if i < 3:
+                        print(f"❌ Combinación {i+1} falló: resultado nulo o inválido")
                 
             except Exception as e:
+                error_count += 1
+                if i < 3:
+                    print(f"❌ Error en combinación {i+1}: {str(e)}")
                 continue
         
         print(f"\n✅ Optimización completada!")
         print(f"📊 Combinaciones válidas: {valid_results}/{total_sets}")
+        print(f"⚠️ Errores encontrados: {error_count}")
         
         if valid_results > 0:
             self.analyze_results()
         else:
             print("❌ No se obtuvieron resultados válidos")
+            print("\n🔍 DIAGNÓSTICO:")
+            print("- Verifica que los parámetros generen señales de trading")
+            print("- Reduce el mínimo de trades requeridos")
+            print("- Aumenta el número de combinaciones a probar")
+            print("- Revisa que los datos tengan suficiente historia")
     
     def analyze_results(self):
         """Analizar y mostrar los mejores resultados"""
@@ -266,11 +313,11 @@ def run_parameter_search():
     print(f"\n🎛️ CONFIGURACIÓN DE LA OPTIMIZACIÓN:")
     
     try:
-        max_combinations = int(input("🧪 Máximo de combinaciones a probar (por defecto 50): ") or 50)
-        min_trades = int(input("📈 Mínimo de trades requeridos (por defecto 10): ") or 10)
+        max_combinations = int(input("🧪 Máximo de combinaciones a probar (por defecto 20): ") or 20)
+        min_trades = int(input("📈 Mínimo de trades requeridos (por defecto 5): ") or 5)
     except ValueError:
-        max_combinations = 50
-        min_trades = 10
+        max_combinations = 20
+        min_trades = 5
         print("⚠️ Usando valores por defecto")
     
     # 4. Ejecutar optimización

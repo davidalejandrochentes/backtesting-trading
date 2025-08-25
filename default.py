@@ -1,4 +1,4 @@
-# main_backtest.py
+# default.py - Versión corregida
 import backtrader as bt
 import pandas as pd
 import numpy as np
@@ -6,9 +6,6 @@ from datetime import datetime, timedelta
 import itertools
 from collections import defaultdict
 import os
-
-# Importar el código del sistema de backtesting
-# (Aquí iría todo el código del sistema que creé anteriormente)
 
 # Indicador SuperTrend personalizado
 class SuperTrend(bt.Indicator):
@@ -23,6 +20,10 @@ class SuperTrend(bt.Indicator):
         self.hl_avg = (self.data.high + self.data.low) / 2.0
         
     def next(self):
+        # Verificar que tenemos suficientes datos
+        if len(self.atr) == 0 or self.atr[0] is None:
+            return
+            
         atr_value = self.atr[0]
         hl_avg = self.hl_avg[0]
         
@@ -58,14 +59,13 @@ class SuperTrend(bt.Indicator):
             if prev_trend != current_trend:  # Cambio de tendencia
                 self.lines.signal_bars[0] = 1
             else:
-                self.lines.signal_bars[0] = self.lines.signal_bars[-1] + 1 if self.lines.signal_bars[-1] < 999 else 999
+                prev_signal_bars = self.lines.signal_bars[-1] if len(self.lines.signal_bars) > 1 else 0
+                self.lines.signal_bars[0] = prev_signal_bars + 1 if prev_signal_bars < 999 else 999
 
 class BinaryOptionsStrategy(bt.Strategy):
     params = (
         # Parámetros de EMAs
         ('ema1_period', 13),
-        #('ema2_period', 16),
-        #('ema3_period', 24),
         
         # Parámetros de SuperTrend
         ('st_period', 10),
@@ -90,28 +90,39 @@ class BinaryOptionsStrategy(bt.Strategy):
         ('min_time_between_trades', 3),  # minutos
         ('supertrend_delay_bars', 2),
 
-        # AGREGAR ESTOS PARÁMETROS AQUÍ
-        ('trading_start_hour', 8),    # Hora de inicio (9 AM)
-        ('trading_end_hour', 13),     # Hora de fin (1 PM)  
-        ('timezone_offset', -4),      # UTC-4 para Cuba
-        ('enable_time_filter', False), # Activar/desactivar filtro
+        # Parámetros de horario
+        ('trading_start_hour', 8),
+        ('trading_end_hour', 13),
+        ('timezone_offset', -4),
+        ('enable_time_filter', False),
         
         # Debug
         ('debug', False),
     )
     
     def __init__(self):
+        # Verificar que los parámetros son válidos
+        self.min_bars_needed = max(
+            self.params.ema1_period,
+            self.params.st_period,
+            self.params.adx_period,
+            self.params.rsi_period
+        ) + 10  # Buffer adicional
+        
         # Indicadores técnicos
-        self.ema1 = bt.indicators.EMA(self.data.close, period=self.params.ema1_period)
-        #self.ema2 = bt.indicators.EMA(self.data.close, period=self.params.ema2_period)
-        #self.ema3 = bt.indicators.EMA(self.data.close, period=self.params.ema3_period)
-        
-        self.supertrend = SuperTrend(self.data, 
-                                   period=self.params.st_period,
-                                   multiplier=self.params.st_multiplier)
-        
-        self.adx = bt.indicators.ADX(self.data, period=self.params.adx_period)
-        self.rsi = bt.indicators.RSI(self.data.close, period=self.params.rsi_period)
+        try:
+            self.ema1 = bt.indicators.EMA(self.data.close, period=self.params.ema1_period)
+            
+            self.supertrend = SuperTrend(self.data, 
+                                       period=self.params.st_period,
+                                       multiplier=self.params.st_multiplier)
+            
+            self.adx = bt.indicators.ADX(self.data, period=self.params.adx_period)
+            self.rsi = bt.indicators.RSI(self.data.close, period=self.params.rsi_period)
+            
+        except Exception as e:
+            print(f"❌ Error inicializando indicadores: {e}")
+            raise
         
         # Control de trades
         self.pending_trades = []
@@ -128,10 +139,7 @@ class BinaryOptionsStrategy(bt.Strategy):
         self.trade_log = []
 
     def is_trading_time(self, current_time):
-        """
-        Verificar si la hora actual está dentro del horario de trading
-        Convierte UTC a hora local de Cuba (UTC-4)
-        """
+        """Verificar si la hora actual está dentro del horario de trading"""
         if not self.params.enable_time_filter:
             return True
         
@@ -147,87 +155,103 @@ class BinaryOptionsStrategy(bt.Strategy):
         return is_valid_time
 
     def next(self):
+        # Verificar que tenemos suficientes datos históricos
+        if len(self.data) < self.min_bars_needed:
+            return
+            
+        # Verificar que todos los indicadores tienen valores válidos
+        try:
+            if (self.ema1[0] is None or 
+                self.supertrend.trend[0] is None or 
+                self.adx[0] is None or 
+                self.rsi[0] is None):
+                return
+        except (IndexError, TypeError):
+            return
+        
         current_time = self.data.datetime.datetime(0)
         current_date = current_time.date()
         
         # Revisar trades que expiran
         self.check_expired_trades(current_time)
         
-        # NUEVO: Verificar horario de trading PRIMERO
+        # Verificar horario de trading
         if not self.is_trading_time(current_time):
-            return  # Salir sin operar si está fuera de horario
+            return
         
-        # Control de frecuencia de trades (código existente)
+        # Control de frecuencia de trades
         if self.should_skip_trade(current_time, current_date):
             return
         
-        # Verificar señales de entrada (código existente)
-        if self.check_call_conditions():
-            self.enter_binary_trade('CALL', current_time)
-        elif self.check_put_conditions():
-            self.enter_binary_trade('PUT', current_time)
+        # Verificar señales de entrada
+        try:
+            if self.check_call_conditions():
+                self.enter_binary_trade('CALL', current_time)
+            elif self.check_put_conditions():
+                self.enter_binary_trade('PUT', current_time)
+        except Exception as e:
+            if self.params.debug:
+                print(f"❌ Error en señales: {e}")
     
     def check_call_conditions(self):
         """Condiciones para operación CALL (al alza)"""
-        #if len(self.data) < max(self.params.ema3_period, self.params.adx_period, self.params.rsi_period):
-        if len(self.data) < max(self.params.ema1_period, self.params.adx_period, self.params.rsi_period):
+        try:
+            current_price = self.data.close[0]
+            
+            # 1. Precio por encima de EMA
+            above_emas = current_price > self.ema1[0]
+            
+            # 2. SuperTrend en señal de compra Y han pasado las velas requeridas
+            st_signal = (self.supertrend.trend[0] == 1 and 
+                        self.supertrend.signal_bars[0] >= self.params.supertrend_delay_bars)
+            
+            # 3. ADX muestra tendencia fuerte
+            strong_trend = self.adx[0] > self.params.adx_threshold
+            
+            # 4. RSI no está en sobrecompra
+            rsi_ok = self.rsi[0] < self.params.rsi_overbought
+            
+            if self.params.debug and above_emas and st_signal:
+                print(f"🔍 CALL Signal Check - Price: {current_price:.5f}, EMAs OK: {above_emas}, "
+                      f"ST Signal: {st_signal}, ADX: {self.adx[0]:.2f}, RSI: {self.rsi[0]:.2f}, "
+                      f"ST Bars: {self.supertrend.signal_bars[0]}")
+            
+            return above_emas and st_signal and strong_trend and rsi_ok
+            
+        except (IndexError, TypeError, AttributeError) as e:
+            if self.params.debug:
+                print(f"❌ Error en check_call_conditions: {e}")
             return False
-        
-        current_price = self.data.close[0]
-        
-        # 1. Precio por encima de las 3 EMAs
-        #above_emas = (current_price > self.ema1[0] and 
-        #                current_price > self.ema2[0] and 
-        #                current_price > self.ema3[0])
-        above_emas = current_price > self.ema1[0]
-        
-        # 2. SuperTrend en señal de compra Y han pasado las velas requeridas
-        st_signal = (self.supertrend.trend[0] == 1 and 
-                    self.supertrend.signal_bars[0] >= self.params.supertrend_delay_bars)
-        
-        # 3. ADX muestra tendencia fuerte
-        strong_trend = self.adx[0] > self.params.adx_threshold
-        
-        # 4. RSI no está en sobrecompra
-        rsi_ok = self.rsi[0] < self.params.rsi_overbought
-        
-        if self.params.debug and above_emas and st_signal:
-            print(f"🔍 CALL Signal Check - Price: {current_price:.5f}, EMAs OK: {above_emas}, "
-                f"ST Signal: {st_signal}, ADX: {self.adx[0]:.2f}, RSI: {self.rsi[0]:.2f}, "
-                f"ST Bars: {self.supertrend.signal_bars[0]}")
-        
-        return above_emas and st_signal and strong_trend and rsi_ok
     
     def check_put_conditions(self):
         """Condiciones para operación PUT (a la baja)"""
-        #if len(self.data) < max(self.params.ema3_period, self.params.adx_period, self.params.rsi_period):
-        if len(self.data) < max(self.params.ema1_period, self.params.adx_period, self.params.rsi_period):
+        try:
+            current_price = self.data.close[0]
+            
+            # 1. Precio por debajo de EMA
+            below_emas = current_price < self.ema1[0]
+            
+            # 2. SuperTrend en señal de venta Y han pasado las velas requeridas
+            st_signal = (self.supertrend.trend[0] == -1 and 
+                        self.supertrend.signal_bars[0] >= self.params.supertrend_delay_bars)
+            
+            # 3. ADX muestra tendencia fuerte
+            strong_trend = self.adx[0] > self.params.adx_threshold
+            
+            # 4. RSI no está en sobreventa
+            rsi_ok = self.rsi[0] > self.params.rsi_oversold
+            
+            if self.params.debug and below_emas and st_signal:
+                print(f"🔍 PUT Signal Check - Price: {current_price:.5f}, EMAs OK: {below_emas}, "
+                      f"ST Signal: {st_signal}, ADX: {self.adx[0]:.2f}, RSI: {self.rsi[0]:.2f}, "
+                      f"ST Bars: {self.supertrend.signal_bars[0]}")
+            
+            return below_emas and st_signal and strong_trend and rsi_ok
+            
+        except (IndexError, TypeError, AttributeError) as e:
+            if self.params.debug:
+                print(f"❌ Error en check_put_conditions: {e}")
             return False
-        
-        current_price = self.data.close[0]
-        
-        # 1. Precio por debajo de las 3 EMAs
-        #below_emas = (current_price < self.ema1[0] and 
-        #                current_price < self.ema2[0] and 
-        #                current_price < self.ema3[0])
-        below_emas = current_price < self.ema1[0]
-        
-        # 2. SuperTrend en señal de venta Y han pasado las velas requeridas
-        st_signal = (self.supertrend.trend[0] == -1 and 
-                    self.supertrend.signal_bars[0] >= self.params.supertrend_delay_bars)
-        
-        # 3. ADX muestra tendencia fuerte
-        strong_trend = self.adx[0] > self.params.adx_threshold
-        
-        # 4. RSI no está en sobreventa
-        rsi_ok = self.rsi[0] > self.params.rsi_oversold
-        
-        if self.params.debug and below_emas and st_signal:
-            print(f"🔍 PUT Signal Check - Price: {current_price:.5f}, EMAs OK: {below_emas}, "
-                f"ST Signal: {st_signal}, ADX: {self.adx[0]:.2f}, RSI: {self.rsi[0]:.2f}, "
-                f"ST Bars: {self.supertrend.signal_bars[0]}")
-        
-        return below_emas and st_signal and strong_trend and rsi_ok
     
     def should_skip_trade(self, current_time, current_date):
         """Control de frecuencia de trades"""
@@ -245,32 +269,36 @@ class BinaryOptionsStrategy(bt.Strategy):
     
     def enter_binary_trade(self, trade_type, entry_time):
         """Simular entrada de trade de opción binaria"""
-        entry_price = self.data.close[0]
-        expiry_time = entry_time + timedelta(minutes=self.params.expiry_minutes)
-        
-        # NUEVO: Verificar que la expiración también esté en horario válido
-        if self.params.enable_time_filter and not self.is_trading_time(expiry_time):
+        try:
+            entry_price = self.data.close[0]
+            expiry_time = entry_time + timedelta(minutes=int(self.params.expiry_minutes))
+            
+            # Verificar que la expiración también esté en horario válido
+            if self.params.enable_time_filter and not self.is_trading_time(expiry_time):
+                if self.params.debug:
+                    print(f"⚠️ Trade cancelado: expiración fuera de horario {expiry_time}")
+                return
+            
+            trade_info = {
+                'type': trade_type,
+                'entry_time': entry_time,
+                'entry_price': entry_price,
+                'expiry_time': expiry_time,
+                'amount': self.params.trade_amount
+            }
+            
+            self.pending_trades.append(trade_info)
+            self.last_trade_time = entry_time
+            self.daily_trades[entry_time.date()] += 1
+            
+            # Log mejorado
             if self.params.debug:
-                print(f"⚠️ Trade cancelado: expiración fuera de horario {expiry_time}")
-            return
-        
-        # Resto del código existente...
-        trade_info = {
-            'type': trade_type,
-            'entry_time': entry_time,
-            'entry_price': entry_price,
-            'expiry_time': expiry_time,
-            'amount': self.params.trade_amount
-        }
-        
-        self.pending_trades.append(trade_info)
-        self.last_trade_time = entry_time
-        self.daily_trades[entry_time.date()] += 1
-        
-        # Log mejorado (opcional)
-        if self.params.debug:
-            cuba_hour = (entry_time.hour + self.params.timezone_offset) % 24
-            print(f"📈 {entry_time}: {trade_type} @ {entry_price:.5f} (Cuba: {cuba_hour:02d}:{entry_time.minute:02d})")
+                cuba_hour = (entry_time.hour + self.params.timezone_offset) % 24
+                print(f"📈 {entry_time}: {trade_type} @ {entry_price:.5f} (Cuba: {cuba_hour:02d}:{entry_time.minute:02d})")
+                
+        except Exception as e:
+            if self.params.debug:
+                print(f"❌ Error en enter_binary_trade: {e}")
     
     def check_expired_trades(self, current_time):
         """Verificar trades que han expirado y calcular resultados"""
@@ -286,45 +314,50 @@ class BinaryOptionsStrategy(bt.Strategy):
     
     def settle_trade(self, trade, current_time):
         """Liquidar trade expirado"""
-        current_price = self.data.close[0]
-        entry_price = trade['entry_price']
-        trade_type = trade['type']
-        amount = trade['amount']
-        
-        # Determinar si el trade fue ganador
-        if trade_type == 'CALL':
-            won = current_price > entry_price
-        else:  # PUT
-            won = current_price < entry_price
-        
-        # Calcular P&L
-        if won:
-            pnl = amount * self.params.payout_rate
-            self.winning_trades += 1
-        else:
-            pnl = -amount
-            self.losing_trades += 1
-        
-        self.total_pnl += pnl
-        self.total_trades += 1
-        
-        # Guardar en log
-        trade_result = {
-            'entry_time': trade['entry_time'],
-            'expiry_time': current_time,
-            'type': trade_type,
-            'entry_price': entry_price,
-            'exit_price': current_price,
-            'result': 'WIN' if won else 'LOSS',
-            'pnl': pnl
-        }
-        self.trade_log.append(trade_result)
-        
-        # Log del resultado
-        if self.params.debug:
-            result = "WIN" if won else "LOSS"
-            print(f"💰 {current_time}: {trade_type} {result} - Entry: {entry_price:.5f}, "
-                  f"Exit: {current_price:.5f}, P&L: {pnl:.2f}")
+        try:
+            current_price = self.data.close[0]
+            entry_price = trade['entry_price']
+            trade_type = trade['type']
+            amount = trade['amount']
+            
+            # Determinar si el trade fue ganador
+            if trade_type == 'CALL':
+                won = current_price > entry_price
+            else:  # PUT
+                won = current_price < entry_price
+            
+            # Calcular P&L
+            if won:
+                pnl = amount * self.params.payout_rate
+                self.winning_trades += 1
+            else:
+                pnl = -amount
+                self.losing_trades += 1
+            
+            self.total_pnl += pnl
+            self.total_trades += 1
+            
+            # Guardar en log
+            trade_result = {
+                'entry_time': trade['entry_time'],
+                'expiry_time': current_time,
+                'type': trade_type,
+                'entry_price': entry_price,
+                'exit_price': current_price,
+                'result': 'WIN' if won else 'LOSS',
+                'pnl': pnl
+            }
+            self.trade_log.append(trade_result)
+            
+            # Log del resultado
+            if self.params.debug:
+                result = "WIN" if won else "LOSS"
+                print(f"💰 {current_time}: {trade_type} {result} - Entry: {entry_price:.5f}, "
+                      f"Exit: {current_price:.5f}, P&L: {pnl:.2f}")
+                      
+        except Exception as e:
+            if self.params.debug:
+                print(f"❌ Error en settle_trade: {e}")
 
 class BinaryOptionsAnalyzer(bt.Analyzer):
     """Analizador personalizado para métricas de opciones binarias"""
@@ -339,6 +372,13 @@ class BinaryOptionsAnalyzer(bt.Analyzer):
             win_rate = (strategy.winning_trades / strategy.total_trades) * 100
             avg_win = strategy.total_pnl / strategy.total_trades if strategy.total_trades > 0 else 0
             
+            # Calcular profit factor más robusto
+            total_losses = strategy.losing_trades * strategy.params.trade_amount
+            if total_losses > 0:
+                profit_factor = abs(strategy.total_pnl + total_losses) / total_losses
+            else:
+                profit_factor = float('inf') if strategy.total_pnl > 0 else 0
+            
             self.results = {
                 'total_trades': strategy.total_trades,
                 'winning_trades': strategy.winning_trades,
@@ -346,8 +386,20 @@ class BinaryOptionsAnalyzer(bt.Analyzer):
                 'win_rate': win_rate,
                 'total_pnl': strategy.total_pnl,
                 'avg_pnl_per_trade': avg_win,
-                'profit_factor': abs(strategy.total_pnl / (strategy.losing_trades * strategy.params.trade_amount)) if strategy.losing_trades > 0 else float('inf'),
+                'profit_factor': profit_factor,
                 'trade_log': strategy.trade_log
+            }
+        else:
+            # Retornar estructura vacía pero válida
+            self.results = {
+                'total_trades': 0,
+                'winning_trades': 0,
+                'losing_trades': 0,
+                'win_rate': 0,
+                'total_pnl': 0,
+                'avg_pnl_per_trade': 0,
+                'profit_factor': 0,
+                'trade_log': []
             }
 
 def load_data(filename):
@@ -357,10 +409,9 @@ def load_data(filename):
         return None
     
     try:
-        # CAMBIO: Agregar nombres de columnas y separador
         df = pd.read_csv(filename, 
                         names=['datetime', 'open', 'high', 'low', 'close', 'volume'],
-                        sep='\t')  # Usar tabulación como separador
+                        sep='\t')
         
         df['datetime'] = pd.to_datetime(df['datetime'])
         df.set_index('datetime', inplace=True)
@@ -375,18 +426,30 @@ def load_data(filename):
 
 def run_single_backtest(data_feed, **params):
     """Ejecutar un backtest con parámetros específicos"""
-    cerebro = bt.Cerebro()
-    cerebro.broker.setcash(100.0) 
-    cerebro.adddata(data_feed)
-    
-    # Agregar estrategia con parámetros
-    cerebro.addstrategy(BinaryOptionsStrategy, **params)
-    cerebro.addanalyzer(BinaryOptionsAnalyzer, _name='binary_analyzer')
-    
-    # Ejecutar
-    results = cerebro.run()
-    
-    return results[0].analyzers.binary_analyzer.results
+    try:
+        cerebro = bt.Cerebro()
+        cerebro.broker.setcash(100.0) 
+        cerebro.adddata(data_feed)
+        
+        # Agregar estrategia con parámetros
+        cerebro.addstrategy(BinaryOptionsStrategy, **params)
+        cerebro.addanalyzer(BinaryOptionsAnalyzer, _name='binary_analyzer')
+        
+        # Ejecutar
+        results = cerebro.run()
+        
+        if results and len(results) > 0:
+            analyzer = results[0].analyzers.binary_analyzer
+            if hasattr(analyzer, 'results'):
+                return analyzer.results
+            else:
+                return None
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"❌ Error en run_single_backtest: {e}")
+        return None
 
 def main():
     """Función principal"""

@@ -1,5 +1,0 @@
-pip freeze > requirements.txt
-pip install -r requirements.txt
-python data_downloader.py
-python main_backtest.py
-virtualenv venv
