@@ -40,7 +40,7 @@ class ParameterOptimizer:
             'rsi_period': [14, 21],
             'rsi_oversold': [30, 35],
             'rsi_overbought': [65, 70],
-            'supertrend_delay_bars': [1, 2, 3, 4, 5],
+            'supertrend_delay_bars': [3, 4, 5],
             'expiry_minutes': [15, 30, 45, 60, 90, 120],
             'max_trades_per_day': [8, 12, 16],
             'min_time_between_trades': [3, 5, 8],
@@ -59,8 +59,10 @@ class ParameterOptimizer:
         
         print(f"📊 Total de combinaciones posibles: {total_combinations:,}")
         
+        # CORRECCIÓN: Cambiar la lógica para usar muestreo aleatorio solo cuando sea necesario
         if total_combinations <= max_combinations:
             # Si son pocas, usar todas las combinaciones
+            print(f"✅ Usando todas las {total_combinations} combinaciones disponibles")
             keys = list(param_ranges.keys())
             values = list(param_ranges.values())
             combinations = list(itertools.product(*values))
@@ -86,18 +88,42 @@ class ParameterOptimizer:
             # Asegurar reproducibilidad
             np.random.seed(42)
             
-            for _ in range(max_combinations):
+            # CORRECCIÓN: Generar combinaciones únicas usando un set para evitar duplicados
+            seen_combinations = set()
+            attempts = 0
+            max_attempts = max_combinations * 3  # Límite para evitar bucle infinito
+            
+            while len(param_sets) < max_combinations and attempts < max_attempts:
                 param_set = {}
+                combination_key = []
+                
                 for param, values in param_ranges.items():
-                    # Convertir a tipos Python nativos para evitar problemas con numpy
-                    selected_value = np.random.choice(values)
+                    # CORRECCIÓN: Usar random.choice en lugar de np.random.choice para evitar problemas
+                    import random
+                    random.seed(42 + attempts)  # Seed diferente en cada intento
+                    selected_value = random.choice(values)
+                    
+                    # Convertir a tipos Python nativos
                     if isinstance(selected_value, (np.integer, np.int64, np.int32)):
                         param_set[param] = int(selected_value)
                     elif isinstance(selected_value, (np.floating, np.float64, np.float32)):
                         param_set[param] = float(selected_value)
                     else:
                         param_set[param] = selected_value
-                param_sets.append(param_set)
+                    
+                    combination_key.append(str(selected_value))
+                
+                # Crear una clave única para esta combinación
+                combination_signature = "_".join(combination_key)
+                
+                # Solo agregar si no la hemos visto antes
+                if combination_signature not in seen_combinations:
+                    seen_combinations.add(combination_signature)
+                    param_sets.append(param_set)
+                
+                attempts += 1
+            
+            print(f"✅ Generadas {len(param_sets)} combinaciones únicas")
         
         return param_sets
     
@@ -120,6 +146,11 @@ class ParameterOptimizer:
         param_sets = self.generate_parameter_combinations(max_combinations)
         total_sets = len(param_sets)
         
+        # CORRECCIÓN: Verificar que realmente tenemos combinaciones
+        if total_sets == 0:
+            print("❌ No se pudieron generar combinaciones de parámetros")
+            return
+        
         print(f"🧪 Probando {total_sets} combinaciones de parámetros...")
         print(f"📈 Mínimo de trades requeridos: {min_trades}")
         
@@ -128,13 +159,12 @@ class ParameterOptimizer:
         error_count = 0
         
         # Para mostrar progreso cada 10%
-        progress_points = [int(total_sets * p / 10) for p in range(1, 11)]
-        next_progress_point = 0
+        progress_points = [max(1, int(total_sets * p / 10)) for p in range(1, 11)]
         
         for i, params in enumerate(param_sets):
             try:
                 # Mostrar progreso solo en ciertos puntos
-                if i + 1 in progress_points:
+                if (i + 1) in progress_points or i == 0:
                     progress = ((i + 1) / total_sets) * 100
                     print(f"⚡ Progreso: {progress:.0f}% - Válidos: {valid_results}/{i+1}")
                 
@@ -208,9 +238,9 @@ class ParameterOptimizer:
         by_profit_factor = sorted(self.results, key=lambda x: x['profit_factor'], reverse=True)
         by_trades = sorted(self.results, key=lambda x: x['total_trades'], reverse=True)
         
-        # Criterio: Mejor Win Rate (mayor porcentaje de éxito)
-        self.best_result = by_winrate[0]  # La configuración con mayor porcentaje de aciertos
-        print(f"🎯 Criterio: Mayor Win Rate (Porcentaje de Éxito)")
+        # Criterio: Mejor P&L Total (más rentable)
+        self.best_result = by_pnl[0]  # La configuración más rentable
+        print(f"🎯 Criterio: Mayor P&L Total (Más Rentable)")
         
         print("\n" + "="*80)
         print("🏆 TOP 5 RESULTADOS POR DIFERENTES MÉTRICAS")
