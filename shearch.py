@@ -12,6 +12,7 @@ from collections import defaultdict
 import os
 from datetime import datetime
 import json
+import random  # Importar random al inicio
 
 # Importar componentes de default.py
 from default import (
@@ -48,7 +49,7 @@ class ParameterOptimizer:
         
         return param_ranges
     
-    def generate_parameter_combinations(self, max_combinations=100):
+    def generate_parameter_combinations(self, max_combinations=100, use_random_seed=True):
         """Generar combinaciones de parámetros (limitado para evitar explosión combinatoria)"""
         param_ranges = self.define_parameter_ranges()
         
@@ -59,7 +60,6 @@ class ParameterOptimizer:
         
         print(f"📊 Total de combinaciones posibles: {total_combinations:,}")
         
-        # CORRECCIÓN: Cambiar la lógica para usar muestreo aleatorio solo cuando sea necesario
         if total_combinations <= max_combinations:
             # Si son pocas, usar todas las combinaciones
             print(f"✅ Usando todas las {total_combinations} combinaciones disponibles")
@@ -85,43 +85,44 @@ class ParameterOptimizer:
             print(f"🎲 Usando muestreo aleatorio de {max_combinations} combinaciones")
             param_sets = []
             
-            # Asegurar reproducibilidad
-            np.random.seed(42)
+            # CORRECCIÓN PRINCIPAL: Inicializar semilla aleatoria UNA SOLA VEZ
+            # y usar un timestamp o None para hacerlo verdaderamente aleatorio
+            if use_random_seed:
+                # Usar timestamp para semilla única cada vez que se ejecuta
+                seed = int(datetime.now().timestamp() * 1000) % 2**32
+                random.seed(seed)
+                np.random.seed(seed)
+                print(f"🔑 Usando semilla aleatoria: {seed}")
+            else:
+                # Para pruebas reproducibles
+                random.seed(42)
+                np.random.seed(42)
+                print(f"🔑 Usando semilla fija: 42")
             
-            # CORRECCIÓN: Generar combinaciones únicas usando un set para evitar duplicados
-            seen_combinations = set()
-            attempts = 0
-            max_attempts = max_combinations * 3  # Límite para evitar bucle infinito
+            # Generar todas las combinaciones posibles primero
+            keys = list(param_ranges.keys())
+            values = list(param_ranges.values())
+            all_combinations = list(itertools.product(*values))
             
-            while len(param_sets) < max_combinations and attempts < max_attempts:
+            # Seleccionar aleatoriamente sin repetición
+            if len(all_combinations) > max_combinations:
+                selected_indices = random.sample(range(len(all_combinations)), max_combinations)
+                selected_combinations = [all_combinations[i] for i in selected_indices]
+            else:
+                selected_combinations = all_combinations
+            
+            # Convertir a diccionarios de parámetros
+            for combo in selected_combinations:
                 param_set = {}
-                combination_key = []
-                
-                for param, values in param_ranges.items():
-                    # CORRECCIÓN: Usar random.choice en lugar de np.random.choice para evitar problemas
-                    import random
-                    random.seed(42 + attempts)  # Seed diferente en cada intento
-                    selected_value = random.choice(values)
-                    
+                for key, value in zip(keys, combo):
                     # Convertir a tipos Python nativos
-                    if isinstance(selected_value, (np.integer, np.int64, np.int32)):
-                        param_set[param] = int(selected_value)
-                    elif isinstance(selected_value, (np.floating, np.float64, np.float32)):
-                        param_set[param] = float(selected_value)
+                    if isinstance(value, (np.integer, np.int64, np.int32)):
+                        param_set[key] = int(value)
+                    elif isinstance(value, (np.floating, np.float64, np.float32)):
+                        param_set[key] = float(value)
                     else:
-                        param_set[param] = selected_value
-                    
-                    combination_key.append(str(selected_value))
-                
-                # Crear una clave única para esta combinación
-                combination_signature = "_".join(combination_key)
-                
-                # Solo agregar si no la hemos visto antes
-                if combination_signature not in seen_combinations:
-                    seen_combinations.add(combination_signature)
-                    param_sets.append(param_set)
-                
-                attempts += 1
+                        param_set[key] = value
+                param_sets.append(param_set)
             
             print(f"✅ Generadas {len(param_sets)} combinaciones únicas")
         
@@ -136,17 +137,17 @@ class ParameterOptimizer:
                 f"Win Rate: {result.get('win_rate', 0):.1f}% | "
                 f"P&L: ${result.get('total_pnl', 0):.2f}")
     
-    def run_optimization(self, max_combinations=50, min_trades=10, verbose=False):
+    def run_optimization(self, max_combinations=50, min_trades=10, verbose=False, use_random_seed=True):
         """Ejecutar optimización de parámetros"""
         print("\n" + "="*60)
         print("🔍 INICIANDO OPTIMIZACIÓN DE PARÁMETROS")
         print("="*60)
         
-        # Generar combinaciones
-        param_sets = self.generate_parameter_combinations(max_combinations)
+        # Generar combinaciones con opción de semilla aleatoria
+        param_sets = self.generate_parameter_combinations(max_combinations, use_random_seed)
         total_sets = len(param_sets)
         
-        # CORRECCIÓN: Verificar que realmente tenemos combinaciones
+        # Verificar que realmente tenemos combinaciones
         if total_sets == 0:
             print("❌ No se pudieron generar combinaciones de parámetros")
             return
@@ -314,13 +315,18 @@ class ParameterOptimizer:
         print(f"   🛡️ Max Trades/Day: {params['max_trades_per_day']}")
         print(f"   ⏳ Min Time Between Trades: {params['min_time_between_trades']} min")
     
-    def save_results(self, filename="optimization_results.json"):
-        """Guardar resultados en archivo JSON"""
+    def save_results(self, filename=None):
+        """Guardar resultados en archivo JSON con nombre único"""
         if not self.results:
             print("❌ No hay resultados para guardar")
             return
         
         try:
+            # Generar nombre de archivo único si no se proporciona
+            if filename is None:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"optimization_results_{timestamp}.json"
+            
             # Preparar datos para guardar
             save_data = {
                 'optimization_date': datetime.now().isoformat(),
@@ -373,17 +379,28 @@ def run_parameter_search(verbose=False):
         verbose_input = input("🔍 ¿Mostrar información detallada de debug? (y/N): ").strip().lower()
         verbose = verbose_input in ['y', 'yes', 'sí', 'si']
         
+        # NUEVA OPCIÓN: Preguntar si quiere resultados aleatorios o reproducibles
+        random_input = input("🎲 ¿Usar selección aleatoria de parámetros? (Y/n): ").strip().lower()
+        use_random = random_input not in ['n', 'no']
+        
+        if not use_random:
+            print("🔒 Usando selección fija (reproducible)")
+        else:
+            print("🎲 Usando selección aleatoria (resultados diferentes cada vez)")
+        
     except ValueError:
         max_combinations = 20
         min_trades = 5
         verbose = False
+        use_random = True
         print("⚠️ Usando valores por defecto")
     
     # 4. Ejecutar optimización
     optimizer = ParameterOptimizer(data_feed)
     optimizer.run_optimization(max_combinations=max_combinations, 
                              min_trades=min_trades, 
-                             verbose=verbose)
+                             verbose=verbose,
+                             use_random_seed=use_random)
     
     # 5. Guardar resultados
     if optimizer.results:
