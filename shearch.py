@@ -527,6 +527,9 @@ def main():
     
     print("\n✨ Proceso completado")
 
+def run_parameter_search():
+    """Función wrapper para ejecutar desde main_backtest.py"""
+    return main()
 
 if __name__ == "__main__":
     main()
